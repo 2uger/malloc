@@ -1,8 +1,23 @@
+/*
+* Malloc implementation with simple list of blocks
+* with metadata information.
+* Using system calls brk() and sbrk() is ineficcient 
+* for size bigger than page(4096), so max size is 4096
+* First fit algo while search place and resize(unite) 
+* blocks when free
+*/
+
+/*
+* TODO:
+*   - count memory bytes
+*   - check blocks when unite them
+*/
+
 #include <stdio.h>
 #include <malloc.h>
 
-// Closest and biggest for align
-#define align4(x) (((((x)-1)>>2)<<2)+4)
+// Closest and biggest for align 32 bits(4 bytes)
+#define ALIGN4(x) (((((x)-1)>>2)<<2)+4)
 
 #define META_DATA_SIZE 24
 #define MAX_MEMORY_ALLOCATION 4096
@@ -54,7 +69,7 @@ void *malloc(size_t size) {
     if (size > MAX_MEMORY_ALLOCATION) 
         return NULL;
 
-    size_t align_size = align4(size);
+    size_t align_size = ALIGN4(size);
     
     HeapBlock *last_block = baseHeap;
     HeapBlock *new_block;
