@@ -15,12 +15,14 @@
 
 #include <stdio.h>
 #include <malloc.h>
+#include <unistd.h>
 
 // Closest and biggest for align 32 bits(4 bytes)
 #define ALIGN4(x) (((((x)-1)>>2)<<2)+4)
 
-#define META_DATA_SIZE 24
 #define MAX_MEMORY_ALLOCATION 4096
+
+static size_t META_DATA_SIZE = 24;
 
 /*
 * HeapBlock + size(MetaData) = pointer to the heap field
@@ -39,31 +41,48 @@ struct MetaData {
 // To count allocated memory
 static size_t memoryUsage;
 // Point to the heap base
-static HeapBlock *baseHeap;
+static HeapBlock *baseHeap = NULL;
 
-/************* Malloc ***************/
+/************* Malloc help funcs ***************/
 
-void *malloc(size_t size);
-
-// Malloc help funcs
 static HeapBlock *find_heap_block(HeapBlock *last_block, size_t size);
 
 static void split_heap_block(HeapBlock *block, size_t size);
 
 static HeapBlock *extend_heap(HeapBlock *last_bloc, size_t size);
 
-/************* Free ***************/
+/************* Free help funcs ***************/
 
-void free(void *ptr);
-
-// Free help funcs
-int validate_heap_pointer(void *ptr);
+static int validate_heap_pointer(void *ptr);
 
 static HeapBlock *unite_heap_block(HeapBlock *block);
 
-
-int main(){
-}
+int main() {
+    void *p = sbrk(0);
+    printf("ALigned size is %zu\n", ALIGN4(9));
+    printf("Start of testing malloc break is in %p\n", sbrk(0));
+    void *pt1 = malloc(2);
+    printf("Adress of base heap is %p\n", baseHeap);
+    malloc(6);
+    printf("Adress of break is %p\n", sbrk(0));
+    malloc(6);
+    printf("Adress of break is %p\n", sbrk(0));
+    malloc(6);
+    printf("Adress of break is %p\n", sbrk(0));
+    malloc(6);
+    printf("Adress of break is %p\n", sbrk(0));
+    malloc(6);
+    printf("Adress of break is %p\n", sbrk(0));
+    //printf("Adress of pt1(8) is %p\n", pt1);
+    //void *pt2 = malloc(8);
+    //printf("Adress of pt2(8) is %p\n", pt2);
+    //void *pt4 = malloc(8);
+    //printf("Adress of sbrk is %p\n", sbrk(0));
+    //printf("Adress of pt4(8) is %p\n", pt4);
+    //free(pt4);
+    //printf("Adress of sbrk is %p\n", sbrk(0));
+    return 0;
+} 
 
 void *malloc(size_t size) {
     if (size > MAX_MEMORY_ALLOCATION) 
@@ -74,7 +93,7 @@ void *malloc(size_t size) {
     HeapBlock *last_block = baseHeap;
     HeapBlock *new_block;
 
-    if (baseHeap) {
+    if (baseHeap != NULL) {
         new_block = find_heap_block(last_block, align_size);
 
         if (new_block) {
@@ -86,8 +105,9 @@ void *malloc(size_t size) {
             new_block = extend_heap(last_block, align_size);
         } 
     } 
-    else {
+    else if (baseHeap == NULL) {
         new_block = extend_heap(NULL, align_size);
+        new_block -> is_free = 0;
         if (new_block == NULL) 
             return NULL;
         baseHeap = new_block; 
@@ -98,19 +118,18 @@ void *malloc(size_t size) {
 
 HeapBlock *find_heap_block(HeapBlock *last_block, size_t size) {
     HeapBlock *new_block = baseHeap;
-    while(new_block && !(new_block->is_free && new_block->size >= size)) {
+    while(new_block && !(new_block->is_free && new_block->size <= size)) {
         last_block = new_block;
         new_block = new_block->next;
     }
+
     return new_block;
 } 
 
 HeapBlock *extend_heap(HeapBlock *last_block, size_t size) {
-    HeapBlock *new_block;
-    new_block = sbrk(0);
+    HeapBlock *new_block = sbrk(0);
 
-    if (sbrk(META_DATA_SIZE + size) == (void*)-1) 
-        return NULL;
+    sbrk(32);
 
     new_block->size = size;
     new_block->is_free = 1;
