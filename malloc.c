@@ -1,90 +1,110 @@
 /*
-* Malloc implementation with simple list of blocks
-* with metadata information.
-* Using system calls brk() and sbrk() is ineficcient 
-* for size bigger than page(4096), so max size is 4096
-* First fit algo while search place and resize(unite) 
-* blocks when free
-*/
-
-/*
-* TODO:
-*   - count memory bytes
-*   - check blocks when unite them
-*/
+ * Malloc implementation with simple list of blocks
+ * with metadata information.
+ * Using system calls brk() and sbrk() is ineficcient 
+ * for size bigger than page(4096), so max size is 4096
+ * First fit algo while search place and resize(unite) 
+ * blocks when free
+ */
 
 #include <stdio.h>
-#include <malloc.h>
+#include <stdint.h>
 #include <unistd.h>
 
 // Closest and biggest for align 32 bits(4 bytes)
 #define ALIGN4(x) (((((x)-1)>>2)<<2)+4)
-
 #define MAX_MEMORY_ALLOCATION 4096
+#define HEAP_SIZE 2000
 
-static size_t META_DATA_SIZE = 24;
 
 /*
-* HeapBlock + size(MetaData) = pointer to the heap field
-*/
+ * HeapBlock + size(MetaData) = pointer to the heap field
+ */
 typedef struct MetaData HeapBlock;
 
 struct MetaData {
     size_t size;
-    int is_free;
+    uint8_t is_free;
     HeapBlock *next;
     HeapBlock *prev;
-};
+} __attribute__((packed));
 
-/************* Global scope ***************/
+static size_t META_DATA_SIZE = sizeof(HeapBlock);
 
-// To count allocated memory
-static size_t memoryUsage;
-// Point to the heap base
-static HeapBlock *baseHeap = NULL;
 
-/************* Malloc help funcs ***************/
+/************* Malloc help functions ***************/
 
-static HeapBlock *find_heap_block(HeapBlock *last_block, size_t size);
+static HeapBlock* find_heap_block(size_t size);
 
 static void split_heap_block(HeapBlock *block, size_t size);
 
-static HeapBlock *extend_heap(HeapBlock *last_bloc, size_t size);
-
-/************* Free help funcs ***************/
+static HeapBlock* extend_heap(HeapBlock *last_bloc, size_t size);
 
 static int validate_heap_pointer(void *ptr);
 
-static HeapBlock *unite_heap_block(HeapBlock *block);
+static HeapBlock* unite_with_next_heap_block(HeapBlock *block);
 
-int main() {
-    void *p = sbrk(0);
-    printf("ALigned size is %zu\n", ALIGN4(9));
-    printf("Start of testing malloc break is in %p\n", sbrk(0));
-    void *pt1 = malloc(2);
-    printf("Adress of base heap is %p\n", baseHeap);
-    malloc(6);
-    printf("Adress of break is %p\n", sbrk(0));
-    malloc(6);
-    printf("Adress of break is %p\n", sbrk(0));
-    malloc(6);
-    printf("Adress of break is %p\n", sbrk(0));
-    malloc(6);
-    printf("Adress of break is %p\n", sbrk(0));
-    malloc(6);
-    printf("Adress of break is %p\n", sbrk(0));
-    //printf("Adress of pt1(8) is %p\n", pt1);
-    //void *pt2 = malloc(8);
-    //printf("Adress of pt2(8) is %p\n", pt2);
-    //void *pt4 = malloc(8);
-    //printf("Adress of sbrk is %p\n", sbrk(0));
-    //printf("Adress of pt4(8) is %p\n", pt4);
-    //free(pt4);
-    //printf("Adress of sbrk is %p\n", sbrk(0));
+void* ssbrk(size_t);
+
+void* bbrk(void*);
+
+void* malloc(size_t);
+
+void free(void *ptr);
+
+
+char heap[HEAP_SIZE];
+static void *current_heap_location = heap;
+HeapBlock *baseHeap = NULL;
+
+int
+main()
+{
+    size_t n_1 = 12;
+    printf("Start address of heap: %p\n", ssbrk(0));
+    void *p_1 = malloc(n_1);
+    printf("Malloc memory start at: %p, should be at: %p\n", p_1, heap + META_DATA_SIZE);
+
+    size_t n_2 = 24;
+    void *p_2 = malloc(n_2);
+    printf("Malloc memory start at: %p, should be at: %p\n", p_2, p_1 + n_1 + META_DATA_SIZE);
+
+    free(p_2);
+    printf("After calling free for previous pointer:%p\n", current_heap_location - n_1);
     return 0;
 } 
 
-void *malloc(size_t size) {
+/*
+ * emulate sbrk system call
+ */
+void *
+ssbrk(size_t increment)
+{
+    if (increment == 0)
+        return current_heap_location;
+    else if ((char*)current_heap_location + increment > &heap[HEAP_SIZE])
+        return -1;
+    
+    current_heap_location += increment;
+
+    return current_heap_location;
+}
+
+void *
+bbrk(void *addr)
+{
+    if (addr > &heap[HEAP_SIZE] || addr < heap)
+        return -1;
+
+    printf("Addr: %p\n", addr);
+    current_heap_location = addr;
+
+    return current_heap_location;
+}
+
+void *
+malloc(size_t size) 
+{
     if (size > MAX_MEMORY_ALLOCATION) 
         return NULL;
 
@@ -94,11 +114,12 @@ void *malloc(size_t size) {
     HeapBlock *new_block;
 
     if (baseHeap != NULL) {
-        new_block = find_heap_block(last_block, align_size);
+        new_block = find_heap_block(align_size);
 
         if (new_block) {
             if (new_block->size >= align_size + META_DATA_SIZE + 4)
                 split_heap_block(new_block, align_size);
+
             new_block->is_free = 0;
         } 
         else if (new_block == NULL) {
@@ -107,29 +128,33 @@ void *malloc(size_t size) {
     } 
     else if (baseHeap == NULL) {
         new_block = extend_heap(NULL, align_size);
-        new_block -> is_free = 0;
         if (new_block == NULL) 
             return NULL;
+        new_block->is_free = 0;
         baseHeap = new_block; 
     } 
 
-    return new_block + META_DATA_SIZE;
+    return (char*)new_block + META_DATA_SIZE;
 }
 
-HeapBlock *find_heap_block(HeapBlock *last_block, size_t size) {
+HeapBlock *
+find_heap_block(size_t size)
+{
     HeapBlock *new_block = baseHeap;
-    while(new_block && !(new_block->is_free && new_block->size <= size)) {
-        last_block = new_block;
+    while (new_block && !(new_block->is_free && new_block->size <= size)) {
         new_block = new_block->next;
     }
 
     return new_block;
 } 
 
-HeapBlock *extend_heap(HeapBlock *last_block, size_t size) {
-    HeapBlock *new_block = sbrk(0);
+HeapBlock *
+extend_heap(HeapBlock *last_block, size_t size)
+{
+    HeapBlock *new_block = ssbrk(0);
 
-    sbrk(32);
+    if (ssbrk(META_DATA_SIZE + size) == (void*)-1)
+        return NULL;
 
     new_block->size = size;
     new_block->is_free = 1;
@@ -142,10 +167,13 @@ HeapBlock *extend_heap(HeapBlock *last_block, size_t size) {
     return new_block; 
 }
 
-void split_heap_block(HeapBlock *block, size_t size) {
+void
+split_heap_block(HeapBlock *block, size_t size)
+{
     HeapBlock *new_block;
 
-    new_block = block + META_DATA_SIZE + size;
+    new_block = (HeapBlock*)((char*)block + META_DATA_SIZE + size);
+
     new_block->size = block->size - size - META_DATA_SIZE;
     new_block->is_free = 1;
     new_block->next = block->next;
@@ -155,7 +183,9 @@ void split_heap_block(HeapBlock *block, size_t size) {
     block->next = new_block;
 }
 
-void free(void *ptr) {
+void
+free(void *ptr)
+{
     if (ptr == NULL) 
         return;
 
@@ -164,32 +194,41 @@ void free(void *ptr) {
 
     HeapBlock *block;
 
-    block = ptr - META_DATA_SIZE;
+    block = (HeapBlock*)((char*)ptr - META_DATA_SIZE);
     block->is_free = 1;
-    if (block->prev && block->prev->is_free)
-        block = unite_heap_block(block->prev);
 
-/*********CHECK if ITS TRUE**************/
+    // check for previous free block
+    if (block->prev && block->prev->is_free)
+        block = unite_with_next_heap_block(block->prev);
+    // check for next free block
     if (block->next && block->next->is_free) {
-        block = unite_heap_block(block); 
-    } 
-    else {
-        // Last block => delete it and release memory(brk)
-        if (block->prev) 
+        block = unite_with_next_heap_block(block); 
+    // check if current block is last one
+    } else if (block->next == NULL) {
+        if (block->prev) {
             block->prev->next = NULL;
-        else 
+            printf("1\n");
+        }
+        else {
             baseHeap = NULL;
-        brk(block);
+            printf("2\n");
+        }
+        printf("Addres of block: %p\n", block);
+        bbrk(block);
     }
 }
 
-int validate_heap_pointer(void *ptr){
+int
+validate_heap_pointer(void *ptr)
+{
     return 11;
 }
 /*
 * Unite heap block with next one
 */
-HeapBlock *unite_heap_block(HeapBlock *block) {
+HeapBlock *
+unite_with_next_heap_block(HeapBlock *block)
+{
     block->size = block->size + META_DATA_SIZE + block->next->size;
     block->next = block->next->next;
     
