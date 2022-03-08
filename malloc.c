@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <unistd.h>
+#include <assert.h>
 
 // Closest and biggest for align 32 bits(4 bytes)
 #define ALIGN4(x) (((((x)-1)>>2)<<2)+4)
@@ -62,10 +63,12 @@ main()
     printf("Start address of heap: %p\n", ssbrk(0));
     void *p_1 = malloc(n_1);
     printf("Malloc memory start at: %p, should be at: %p\n", p_1, heap + META_DATA_SIZE);
+    assert(p_1 == heap + META_DATA_SIZE);
 
     size_t n_2 = 24;
     void *p_2 = malloc(n_2);
     printf("Malloc memory start at: %p, should be at: %p\n", p_2, p_1 + n_1 + META_DATA_SIZE);
+    assert(p_2 == p_1 + n_1 + META_DATA_SIZE);
 
     free(p_2);
     printf("Current heap pointer after calling free for previous pointer:%p\n", current_heap_location - n_1);
