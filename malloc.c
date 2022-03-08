@@ -11,6 +11,7 @@
 #define ALIGN4(x) (((((x)-1)>>2)<<2)+4)
 #define MAX_MEMORY_ALLOCATION 4096
 #define HEAP_SIZE 2000
+#define VALIDATION_FLAG 'h'
 
 
 /*
@@ -19,6 +20,7 @@
 typedef struct MetaData HeapBlock;
 
 struct MetaData {
+    char validation_flag;
     size_t size;
     uint8_t is_free;
     HeapBlock *next;
@@ -66,7 +68,11 @@ main()
     printf("Malloc memory start at: %p, should be at: %p\n", p_2, p_1 + n_1 + META_DATA_SIZE);
 
     free(p_2);
-    printf("After calling free for previous pointer:%p\n", current_heap_location - n_1);
+    printf("Current heap pointer after calling free for previous pointer:%p\n", current_heap_location - n_1);
+
+    free(p_1);
+    printf("Current heap pointer after calling free for previous pointer:%p\n", current_heap_location);
+
     return 0;
 } 
 
@@ -92,7 +98,6 @@ bbrk(void *addr)
     if (addr > &heap[HEAP_SIZE] || addr < heap)
         return -1;
 
-    printf("Addr: %p\n", addr);
     current_heap_location = addr;
 
     return current_heap_location;
@@ -152,6 +157,7 @@ extend_heap(HeapBlock *last_block, size_t size)
     if (ssbrk(META_DATA_SIZE + size) == (void*)-1)
         return NULL;
 
+    new_block->validation_flag = VALIDATION_FLAG;
     new_block->size = size;
     new_block->is_free = 1;
     new_block->next = NULL;
@@ -201,15 +207,10 @@ free(void *ptr)
         block = unite_with_next_heap_block(block); 
     // check if current block is last one
     } else if (block->next == NULL) {
-        if (block->prev) {
+        if (block->prev)
             block->prev->next = NULL;
-            printf("1\n");
-        }
-        else {
+        else
             baseHeap = NULL;
-            printf("2\n");
-        }
-        printf("Addres of block: %p\n", block);
         bbrk(block);
     }
 }
@@ -217,11 +218,14 @@ free(void *ptr)
 int
 validate_heap_pointer(void *ptr)
 {
-    return 11;
+    HeapBlock *block = (HeapBlock*)((char*)ptr - META_DATA_SIZE);
+    
+    return block->validation_flag == VALIDATION_FLAG;
 }
+
 /*
-* Unite heap block with next one
-*/
+ * Unite heap block with next one
+ */
 HeapBlock *
 unite_with_next_heap_block(HeapBlock *block)
 {
