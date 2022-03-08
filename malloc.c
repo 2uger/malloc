@@ -1,10 +1,6 @@
 /*
  * Malloc implementation with simple list of blocks
  * with metadata information.
- * Using system calls brk() and sbrk() is ineficcient 
- * for size bigger than page(4096), so max size is 4096
- * First fit algo while search place and resize(unite) 
- * blocks when free
  */
 
 #include <stdio.h>
